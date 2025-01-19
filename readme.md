@@ -76,6 +76,7 @@ The API documentation is available at `http://localhost:5000/apidocs/`.
 #### Reservation Endpoints
 
 - `POST /reservations`: Create a reservation for a movie
+- `GET /reservations/<int:user_id>`: Get reservations for the authenticated user
 
 ## Configuration
 
@@ -85,6 +86,7 @@ The application uses environment variables for configuration. The following vari
 - `SQLALCHEMY_DATABASE_URI`: The database URI
 - `SQLALCHEMY_TRACK_MODIFICATIONS`: Whether to track modifications (usually set to `False`)
 - `JWT_SECRET_KEY`: A secret key for JWT
+- `JWT_VERIFY_SUB`: Whether to verify the subject claim in JWT (usually set to `False`)
 
 ## License
 
