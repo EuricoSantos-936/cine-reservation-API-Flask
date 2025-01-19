@@ -26,3 +26,4 @@ class Reservation(db.Model):
     movie_id = db.Column(db.Integer, db.ForeignKey('movie.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     room_select = db.Column(db.String(50), nullable=False)
+    movie = db.relationship('Movie', backref=db.backref('reservations', lazy=True))

@@ -4,6 +4,7 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from flask_login import login_user
 from api.models import models
 from api.orm.data_orm import db
+import logging
 
 main_view = Blueprint("main_view", __name__)
 
@@ -19,7 +20,9 @@ def admin_required(f):
     @jwt_required()
     def decorated_function(*args, **kwargs):
         current_user = get_jwt_identity()
-        if not current_user or not current_user.get("is_admin"):
+        user_id = int(current_user)
+        user = models.User.query.get(user_id)
+        if not user or not user.is_admin:
             return jsonify({"message": "Access denied, you are not an admin"}), 403
         return f(*args, **kwargs)
     return decorated_function
@@ -161,7 +164,7 @@ def login():
 
     if user and user.check_password(password):
         login_user(user)
-        access_token = create_access_token(identity={"id": user.id, "is_admin": user.is_admin})
+        access_token = create_access_token(str(user.id))
         return jsonify({
             "message": "Login successful",
             "access_token": access_token,
@@ -297,6 +300,64 @@ def create_reservation():
 
     return jsonify({"message": "Reservation created successfully"}), 201
 
+# Route to get reservations for the authenticated user
+@main_view.route("/reservations/<int:user_id>", methods=["GET"])
+@jwt_required()
+def get_my_reservations(user_id):
+    """
+    Retrieves the list of reservations for the authenticated user.
+    ---
+    tags:
+      - Reservations
+    parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          type: integer
+    responses:
+      200:
+        description: A list of reservations
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              movie_title:
+                type: string
+              room:
+                type: string
+      401:
+        description: Unauthorized
+      404:
+        description: No reservations found
+    """
+    current_user_id = get_jwt_identity()
+    logging.info(f"Current user ID: {current_user_id}, Requested user ID: {user_id}")
+    if current_user_id != str(user_id):
+        logging.warning("Unauthorized access attempt")
+        return jsonify({"message": "Unauthorized"}), 401
+
+    reservations = models.Reservation.query.filter_by(user_id=user_id).all()
+    if not reservations:
+        return jsonify([]), 200
+    
+    reservations_count = {}
+    for reservation in reservations:
+        movie_title = reservation.movie.title
+        if movie_title in reservations_count:
+            reservations_count[movie_title] += 1
+        else:
+            reservations_count[movie_title] = 1
+
+    reservations_list = [
+        {
+            "movie_title": title,
+            "seats_reserved": count
+        }
+        for title, count in reservations_count.items()
+    ]
+    return jsonify(reservations_list), 200
 # Route to create a movie
 @main_view.route("/showing_movies", methods=["POST"])
 @admin_required
@@ -322,14 +383,14 @@ def add_showing_movie():
             description:
               type: string
             room:
-              type: string
+              type: integer
             seats:
               type: integer
     responses:
       201:
         description: Movie added successfully
       400:
-        description: Title, room and seats are required
+        description: Title, description, room and seats are required
       400:
         description: Room already in use
     """
@@ -339,8 +400,8 @@ def add_showing_movie():
     room = data.get("room")
     seats = data.get("seats")
 
-    if not title or not room or not seats:
-        return jsonify({"message": "Title, room and seats are required"}), 400
+    if not title or not description or not room or not seats:
+        return jsonify({"message": "Title, description, room and seats are required"}), 400
 
     existing_movie = models.Movie.query.filter_by(room=room).first()
     if existing_movie:
@@ -353,7 +414,6 @@ def add_showing_movie():
     db.session.commit()
 
     return jsonify({"message": "Movie added successfully"}), 201
-
 # Route to delete a movie, deletes all its reservations too
 @main_view.route("/movies/<int:movie_id>", methods=["DELETE"])
 @admin_required
